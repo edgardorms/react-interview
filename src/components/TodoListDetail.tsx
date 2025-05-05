@@ -383,7 +383,7 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
             try {
               await fetchItems(true);
             } catch (pollError) {}
-          }, 2000);
+          }, 200);
         }
       } catch (err) {
         setError(`Failed to initiate complete all items (vanilla mode).`);
