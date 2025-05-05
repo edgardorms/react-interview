@@ -71,7 +71,8 @@ export const deleteTodoList = (id: string): Promise<void> => {
     `${API_BASE_URL}/${API_NAMESPACE}/${TODO_LIST_RESOURCE}/${id}`,
     {
       method: "DELETE",
-    }
+    },
+    204
   );
 };
 
@@ -116,7 +117,8 @@ export const deleteTodoListItem = (
     `${API_BASE_URL}/${API_NAMESPACE}/${TODO_LIST_RESOURCE}/${listId}/${TODO_ITEM_RESOURCE}/${itemId}`,
     {
       method: "DELETE",
-    }
+    },
+    204
   );
 };
 

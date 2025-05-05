@@ -11,10 +11,9 @@ function App() {
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [selectedListName, setSelectedListName] = useState<string>("");
   const [allLists, setAllLists] = useState<TodoList[]>([]);
-  const [isLoadingLists, setIsLoadingLists] = useState(false); // Start as false, load only when mode selected
-  const [currentMode, setCurrentMode] = useState<AppMode>("select"); // New state for mode
+  const [isLoadingLists, setIsLoadingLists] = useState(false);
+  const [currentMode, setCurrentMode] = useState<AppMode>("select");
 
-  // Fetch lists only when a mode is selected and we are viewing the list view
   useEffect(() => {
     if (currentMode !== "select" && !selectedListId) {
       const fetchInitialLists = async () => {
@@ -23,8 +22,6 @@ function App() {
           const lists = await getTodoLists();
           setAllLists(lists);
         } catch (error) {
-          console.error("Failed to fetch initial lists:", error);
-          // Handle error display if needed
         } finally {
           setIsLoadingLists(false);
         }
@@ -42,12 +39,10 @@ function App() {
   const handleBackToLists = () => {
     setSelectedListId(null);
     setSelectedListName("");
-    // No need to refetch here, useEffect will handle it based on currentMode
   };
 
   const selectMode = (mode: AppMode) => {
     setCurrentMode(mode);
-    // Reset list selection when changing mode
     setSelectedListId(null);
     setSelectedListName("");
   };
@@ -82,14 +77,13 @@ function App() {
             listId={selectedListId}
             listName={selectedListName}
             onBack={handleBackToLists}
-            mode={currentMode} // Pass the mode down
+            mode={currentMode}
           />
         ) : (
-          <TodoListList onSelectList={handleSelectList} mode={currentMode} /> // Pass the mode down
+          <TodoListList onSelectList={handleSelectList} mode={currentMode} />
         )}
       </div>
 
-      {/* Button to go back to mode selection */}
       {currentMode !== "select" && (
         <button
           onClick={() => selectMode("select")}

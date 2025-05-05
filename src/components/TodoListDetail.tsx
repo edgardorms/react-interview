@@ -46,7 +46,6 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
-      console.log("Polling stopped.");
     }
   }, []);
 
@@ -63,13 +62,7 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
       }
 
       try {
-        console.log(
-          `Workspaceing items for list ${listId}... ${
-            calledDuringPolling ? "(Polling)" : ""
-          }`
-        );
         const data = await getTodoListItems(listId);
-        console.log(`Workspaceed ${data.length} items.`);
         setItems(data);
 
         if (
@@ -78,7 +71,6 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
           data.length > 0 &&
           data.every((item) => item.completed)
         ) {
-          console.log("Polling: All items completed. Stopping poll.");
           stopPolling();
           setIsCompletingAll(false);
         }
@@ -89,7 +81,6 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
           calledDuringPolling ? " during polling" : ""
         }.`;
         setError(errorMsg);
-        console.error(errorMsg, err);
         if (calledDuringPolling || mode === "vanilla") {
           stopPolling();
           setIsCompletingAll(false);
@@ -108,12 +99,8 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
   );
 
   useEffect(() => {
-    console.log(`Initial fetch triggered for listId: ${listId}`);
-    fetchItems().catch(() => {
-      console.log("Initial fetch failed.");
-    });
+    fetchItems().catch(() => {});
     return () => {
-      console.log(`Cleaning up initial fetch effect for listId: ${listId}`);
       if (mode === "vanilla") {
         stopPolling();
       }
@@ -121,47 +108,31 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
   }, [listId, fetchItems, mode]);
 
   useEffect(() => {
-    // 1. Salir temprano si no estamos en modo websocket
     if (mode !== "websocket") {
-      // Limpieza si *estábamos* en modo websocket y cambiamos
       if (connectionRef.current) {
-        console.log("Switching from Websocket mode: Stopping connection...");
-        connectionRef.current
-          .stop()
-          .then(() => console.log("SignalR stopped due to mode change."))
-          .catch((err) =>
-            console.error("Error stopping SignalR on mode change:", err)
-          );
+        connectionRef.current.stop().catch(() => {});
         connectionRef.current = null;
       }
-      // Resetear estados específicos de websocket
       setCompletionProgress(null);
-      if (isCompletingAll) setIsCompletingAll(false); // Resetear si estaba en proceso
-      return; // No configurar nada más
-    }
-
-    // 2. Evitar crear múltiples conexiones si ya existe una
-    if (connectionRef.current) {
-      console.log("SignalR connection already exists.");
-      // Podrías verificar connectionRef.current.state aquí si necesitas reaccionar a reconexiones
+      if (isCompletingAll) setIsCompletingAll(false);
       return;
     }
 
-    // 3. Crear la nueva conexión
-    console.log("Setting up NEW SignalR connection...");
+    if (connectionRef.current) {
+      return;
+    }
+
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${import.meta.env.VITE_API_BASE_URL}/todohub`) // Asegúrate que la URL es correcta
-      .withAutomaticReconnect() // Intentará reconectar automáticamente
+      .withUrl(`${import.meta.env.VITE_API_BASE_URL}/todohub`)
+      .withAutomaticReconnect()
       .build();
 
-    // Guardar la conexión en la ref
     connectionRef.current = connection;
 
-    // 4. Definir los Handlers (Listeners de mensajes del servidor)
     connection.on(
       "ReceiveTodoCompletionUpdate",
       (
-        updatedListId: number | string | null | undefined, // Ampliamos tipos posibles para debug
+        updatedListId: number | string | null | undefined,
         justCompletedItemId: string | null | undefined,
         completedCount: number,
         totalCount: number
@@ -169,46 +140,31 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
         const backendListIdStr = updatedListId?.toString().trim();
         const currentListIdStr = listId?.toString().trim();
 
-        // Solo procesar si es para la lista actual Y los IDs son válidos
         if (
           backendListIdStr &&
           currentListIdStr &&
           backendListIdStr === currentListIdStr
         ) {
-          // a) Actualizar el progreso visual
           setCompletionProgress({
             completed: completedCount,
             total: totalCount,
           });
 
-          // b) Actualizar el estado 'items'
           if (justCompletedItemId) {
             setItems((currentItems) => {
               const index = currentItems.findIndex(
                 (item) => item.id == justCompletedItemId
               );
               if (index === -1 || currentItems[index].completed) {
-                if (index !== -1)
-                  console.log(`Item ${justCompletedItemId} already completed.`);
-                else console.warn(`Item ${justCompletedItemId} not found.`);
                 return currentItems;
               }
               const newItems = [...currentItems];
               newItems[index] = { ...currentItems[index], completed: true };
-              console.log(
-                `Item ${justCompletedItemId} marked as completed in state.`
-              );
               return newItems;
             });
-          } else {
-            console.warn(
-              "Update received but justCompletedItemId is null or undefined."
-            );
           }
 
-          // c) Comprobar si la operación "Complete All" ha terminado
           if (completedCount === totalCount && totalCount > 0) {
-            console.log("All items reported as completed by SignalR.");
             setIsCompletingAll(false);
             setCompletionProgress(null);
           }
@@ -216,92 +172,53 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
       }
     );
 
-    // Otros handlers útiles para diagnóstico
-    connection.onclose((error) => {
-      console.error("SignalR connection closed.", error);
+    connection.onclose(() => {
       setError("Real-time connection lost. Attempting to reconnect...");
     });
-    connection.onreconnecting((error) => {
-      console.warn("SignalR connection reconnecting...", error);
+    connection.onreconnecting(() => {
       setError("Real-time connection interrupted. Attempting to reconnect...");
     });
-    connection.onreconnected((connectionId) => {
-      console.log("SignalR connection reconnected successfully!", connectionId);
-      setError(null); // Limpiar error de conexión
+    connection.onreconnected(() => {
+      setError(null);
       if (
         connectionRef.current?.state === signalR.HubConnectionState.Connected
       ) {
-        console.log(`Re-joining group ${listId} after reconnection.`);
         connectionRef.current
           .invoke("JoinListGroup", listId.toString())
-          .catch((err) =>
-            console.error(
-              `Failed to re-join group ${listId} after reconnect:`,
-              err
-            )
-          );
+          .catch(() => {});
       }
     });
 
-    // 5. Iniciar la conexión e intentar unirse al grupo
     connection
       .start()
       .then(() => {
-        console.log("SignalR Connected successfully.");
-        setError(null); // Limpiar errores previos de conexión
-        // Intentar unirse al grupo específico de esta lista
+        setError(null);
         if (connection.state === signalR.HubConnectionState.Connected) {
-          console.log(`Attempting to join SignalR group: ${listId}`);
-          connection
-            .invoke("JoinListGroup", listId.toString())
-            .then(() =>
-              console.log(
-                `Successfully invoked JoinListGroup for list: ${listId}`
-              )
-            )
-            .catch((err) => {
-              console.error(
-                `Failed to invoke JoinListGroup for '${listId}':`,
-                err
-              );
-              setError(
-                "Failed to subscribe to real-time updates for this list."
-              );
-            });
+          connection.invoke("JoinListGroup", listId.toString()).catch(() => {
+            setError("Failed to subscribe to real-time updates for this list.");
+          });
         }
       })
-      .catch((err) => {
-        console.error("SignalR Connection Error on start:", err);
+      .catch(() => {
         setError("Failed to connect for real-time updates.");
-        connectionRef.current = null; // Limpiar ref si falla el inicio
+        connectionRef.current = null;
       });
 
-    // 6. Función de limpieza para este efecto
     return () => {
-      console.log(`Cleaning up SignalR effect for listId: ${listId}`);
       const connToCleanup = connectionRef.current;
       if (connToCleanup) {
-        // Quitar handlers para evitar fugas de memoria
         connToCleanup.off("ReceiveTodoCompletionUpdate");
         connToCleanup.off("onclose");
         connToCleanup.off("onreconnecting");
         connToCleanup.off("onreconnected");
 
-        // Dejar el grupo y detener la conexión
-        console.log("Leaving group and stopping SignalR connection...");
-        // No necesitamos esperar a LeaveListGroup si vamos a detener la conexión igual
         connToCleanup
           .invoke("LeaveListGroup", listId.toString())
-          .catch((err) => console.warn(`Error leaving group ${listId}:`, err)) // Advertir pero continuar
+          .catch(() => {})
           .finally(() => {
-            // Siempre intentar detener
-            connToCleanup
-              .stop()
-              .then(() => console.log("SignalR connection stopped."))
-              .catch((err) => console.error("Error stopping SignalR:", err));
+            connToCleanup.stop().catch(() => {});
           });
 
-        // Limpiar la referencia
         connectionRef.current = null;
       }
       setCompletionProgress(null);
@@ -330,13 +247,12 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
       );
     } catch (err) {
       setError("Failed to add item.");
-      console.error(err);
       setItems((prevItems) => prevItems.filter((item) => item.id !== tempId));
       setNewItemDesc(originalDesc);
     }
   };
+
   const handleToggleComplete = async (item: TodoListItem) => {
-    /* ... SIN CAMBIOS ... */
     if (isCompletingAll || isMocking || editingItemId === item.id) return;
     setError(null);
     const originalCompleted = item.completed;
@@ -351,7 +267,6 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
       });
     } catch (err) {
       setError("Failed to update item status.");
-      console.error(err);
       setItems((prevItems) =>
         prevItems.map((i) =>
           i.id === item.id ? { ...i, completed: originalCompleted } : i
@@ -359,31 +274,31 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
       );
     }
   };
+
   const handleDeleteItem = async (itemId: string) => {
     if (isCompletingAll || isMocking || editingItemId === itemId) return;
     setError(null);
-    if (!confirm("Are you sure you want to delete this item?")) {
-      return;
-    }
     const originalItems = items;
     setItems(items.filter((item) => item.id !== itemId));
     try {
       await deleteTodoListItem(listId, itemId);
     } catch (err) {
       setError("Failed to delete item.");
-      console.error(err);
       setItems(originalItems);
     }
   };
+
   const startEditing = (item: TodoListItem) => {
     if (isCompletingAll || isMocking || item.completed) return;
     setEditingItemId(item.id);
     setEditingItemDesc(item.description);
   };
+
   const cancelEditing = () => {
     setEditingItemId(null);
     setEditingItemDesc("");
   };
+
   const handleUpdateItemDesc = async (itemId: string) => {
     const currentItem = items.find((i) => i.id === itemId);
     if (
@@ -410,7 +325,6 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
       });
     } catch (err) {
       setError("Failed to update item description.");
-      console.error(err);
       setItems(
         items.map((i) =>
           i.id === itemId ? { ...i, description: originalDesc } : i
@@ -418,6 +332,7 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
       );
     }
   };
+
   const handleMockData = async () => {
     if (isMocking || isCompletingAll) return;
     setIsMocking(true);
@@ -428,7 +343,6 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
       await fetchItems();
     } catch (err) {
       setError("Failed to generate mock data.");
-      console.error(err);
     } finally {
       setIsMocking(false);
     }
@@ -439,7 +353,6 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
 
     const itemsToComplete = items.filter((item) => !item.completed);
     if (itemsToComplete.length === 0) {
-      console.log("Complete All: No items to complete.");
       return;
     }
 
@@ -447,7 +360,6 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
     setIsCompletingAll(true);
 
     if (mode === "websocket") {
-      console.log("Initiating Complete All (Websocket Mode)...");
       const totalItems = items.length;
       const currentlyCompleted = totalItems - itemsToComplete.length;
       setCompletionProgress({
@@ -457,13 +369,8 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
 
       try {
         await completeAllItemsSignalR(listId);
-
-        console.log(
-          "Complete All signal sent to backend via SignalR endpoint."
-        );
       } catch (err) {
         setError(`Failed to initiate complete all items (websocket mode).`);
-        console.error("Error calling completeAllItemsSignalR:", err);
         setIsCompletingAll(false);
         setCompletionProgress(null);
       }
@@ -474,16 +381,12 @@ const TodoListDetail: React.FC<TodoListDetailProps> = ({
         if (!pollingIntervalRef.current) {
           pollingIntervalRef.current = setInterval(async () => {
             try {
-              console.log("Polling for completion status...");
               await fetchItems(true);
-            } catch (pollError) {
-              console.error("Error during completion polling:", pollError);
-            }
+            } catch (pollError) {}
           }, 2000);
         }
       } catch (err) {
         setError(`Failed to initiate complete all items (vanilla mode).`);
-        console.error("Error calling completeAllItems:", err);
         setIsCompletingAll(false);
       }
     }

@@ -4,7 +4,7 @@ import { getTodoLists, createTodoList, deleteTodoList } from "../services/api";
 
 interface TodoListListProps {
   onSelectList: (listId: string) => void;
-  mode: "vanilla" | "websocket"; // Accept mode prop
+  mode: "vanilla" | "websocket";
 }
 
 const TodoListList: React.FC<TodoListListProps> = ({ onSelectList, mode }) => {
@@ -25,7 +25,6 @@ const TodoListList: React.FC<TodoListListProps> = ({ onSelectList, mode }) => {
       setLists(data);
     } catch (err) {
       setError("Failed to fetch lists. Please ensure the API is running.");
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -41,23 +40,17 @@ const TodoListList: React.FC<TodoListListProps> = ({ onSelectList, mode }) => {
       setNewListName("");
     } catch (err) {
       setError("Failed to create list.");
-      console.error(err);
     }
   };
 
   const handleDeleteList = async (id: string) => {
     setError(null);
-    if (
-      !confirm("Are you sure you want to delete this list and all its items?")
-    ) {
-      return;
-    }
+
     try {
       await deleteTodoList(id);
       setLists(lists.filter((list) => list.id !== id));
     } catch (err) {
       setError("Failed to delete list.");
-      console.error(err);
     }
   };
 
