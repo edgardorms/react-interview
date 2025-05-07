@@ -1,3 +1,4 @@
+Put in .env file the api host to run correctly the project
 
 # react-interview
 
